@@ -17,13 +17,10 @@ type UsageRecord = {
 export class InMemoryUsageStore implements UsageStore {
   private records = new Map<string, UsageRecord>();
 
+  constructor(private readonly maxEntries = 10_000) {}
+
   async consume(trace: string, limit: number, exp: number, now: number): Promise<void> {
-    const existing = this.records.get(trace);
-
-    if (existing && now > existing.exp) {
-      this.records.delete(trace);
-    }
-
+    this.evictExpired(now);
     const record = this.records.get(trace) ?? { used: 0, limit, exp };
 
     if (now > record.exp) {
@@ -39,5 +36,24 @@ export class InMemoryUsageStore implements UsageStore {
     record.limit = limit;
     record.exp = exp;
     this.records.set(trace, record);
+
+    if (this.records.size > this.maxEntries) {
+      this.trimOldest();
+    }
+  }
+
+  private evictExpired(now: number) {
+    for (const [trace, record] of this.records.entries()) {
+      if (now > record.exp) {
+        this.records.delete(trace);
+      }
+    }
+  }
+
+  private trimOldest() {
+    const oldestKey = this.records.keys().next().value;
+    if (oldestKey) {
+      this.records.delete(oldestKey);
+    }
   }
 }

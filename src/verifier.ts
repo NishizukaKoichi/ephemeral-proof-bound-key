@@ -2,6 +2,7 @@ import { calculateJwkThumbprint, decodeProtectedHeader, importJWK, JWK, jwtVerif
 import { URL } from 'node:url';
 import { EKeyVerificationError } from './errors.js';
 import { InMemoryUsageStore, UsageStore, UsageStoreError } from './usage-store.js';
+import { AuditLogger, NoopAuditLogger } from './audit.js';
 
 export interface Capability {
   action: string;
@@ -17,6 +18,7 @@ export interface VerifierOptions {
   usageStore?: UsageStore;
   clockToleranceSeconds?: number;
   nowProvider?: () => number; // unix seconds
+  auditLogger?: AuditLogger;
 }
 
 export interface VerifyInput {
@@ -57,12 +59,14 @@ export class EKeyVerifier {
   private readonly usageStore: UsageStore;
   private readonly now: () => number;
   private readonly clockTolerance: number;
+  private readonly audit: AuditLogger;
 
   constructor(private readonly options: VerifierOptions) {
     this.publicKeyPromise = importJWK(options.issuerPublicJwk, 'ES256');
     this.usageStore = options.usageStore ?? new InMemoryUsageStore();
     this.now = options.nowProvider ?? defaultNow;
     this.clockTolerance = options.clockToleranceSeconds ?? 5;
+    this.audit = options.auditLogger ?? new NoopAuditLogger();
   }
 
   async verify(input: VerifyInput): Promise<VerificationResult> {
@@ -112,9 +116,11 @@ export class EKeyVerifier {
     } catch (err) {
       if (err instanceof UsageStoreError) {
         if (err.code === 'token_expired') {
+          await this.audit.record({ sub: String(payload.sub), trace, outcome: 'expired', reason: 'usage_store', timestamp: Date.now() });
           throw new EKeyVerificationError('expired_token', 'E-Key expired before consumption');
         }
         if (err.code === 'limit_exhausted') {
+          await this.audit.record({ sub: String(payload.sub), trace, outcome: 'replay_blocked', reason: 'limit', timestamp: Date.now() });
           throw new EKeyVerificationError('replay_detected', 'cap.limit exhausted for trace');
         }
       }
@@ -149,6 +155,8 @@ export class EKeyVerifier {
     } else {
       throw new EKeyVerificationError('invalid_token', `unsupported bind mode ${bind}`);
     }
+
+    await this.audit.record({ sub: String(payload.sub), trace, outcome: 'allowed', timestamp: Date.now() });
 
     return {
       sub: String(payload.sub),

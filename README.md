@@ -146,9 +146,28 @@ await fetch('https://api.example.com/payments', {
 
 The helper caches the keypair per session; `client.dpopHelper.computeJkt()` can be supplied to the issuer if needed, ensuring the resulting token’s `cnf.jkt` matches.
 
+## Replay protection & auditing (Issue #5)
+
+- `InMemoryUsageStore` enforces single-use semantics for each `trace`, evicting expired records and rejecting any request once `cap.limit` is consumed. Swap in Redis/Memcached by implementing the `UsageStore` interface.
+- `EKeyVerifier` accepts an optional `auditLogger` and emits structured events (`allowed`, `replay_blocked`, `expired`) with `sub`, `trace`, and timestamps to feed SIEM or dashboards.
+
+```ts
+const verifier = new EKeyVerifier({
+  issuer: config.ISSUER_URL,
+  audience: 'https://api.example.com',
+  issuerPublicJwk: await signingKeyProvider.getPublicJwk(),
+  usageStore: new RedisUsageStore(redisClient), // custom impl
+  auditLogger: new DatadogAuditLogger(),
+});
+```
+
 ## Status
 
 - [x] Repository initialized
 - [x] E-Key issuer/server prototype
 - [x] Resource-server verification middleware
 - [x] Client SDKs / DPoP helpers
+- [x] Support mTLS binding and SPIFFE/SVID integration
+- [x] Implement replay protection and trace auditing
+- [ ] Create conformance test suite and CI
+- [ ] Document deployment and operational guidance

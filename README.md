@@ -10,11 +10,41 @@ This repository hosts the reference documentation, specs, and future prototypes 
 
 1. Read through `EKEY_SPEC.md` to understand terminology, threat model, and expected implementation details.
 2. Align your E-Key Server (EKS) and client with the documented issuance and verification flows before implementing SDKs.
-3. Open issues/PRs to contribute extensions such as SDK scaffolding, verification middleware, or issuer reference code.
+3. Run the issuer prototype locally to mint one-off E-Keys for testing.
+4. Open issues/PRs to contribute extensions such as SDK scaffolding, verification middleware, or issuer reference code.
+
+## Issuer prototype (Issue #1)
+
+```bash
+npm install
+npm run dev
+# server listens on http://localhost:4000
+```
+
+Mint an E-Key with a previously generated client JWK:
+
+```bash
+curl -X POST http://localhost:4000/token \\
+  -H 'content-type: application/json' \\
+  -d '{
+    "sub": "agent-123",
+    "aud": "https://api.example.com",
+    "ttl": 30,
+    "bind": "DPoP",
+    "cap": { "action": "POST:/payments", "limit": 1 },
+    "jwk": {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "m3iO44EpoO0YX3XlKZtp1Y8hLe0KzlzSCuaCM6Kw_kA",
+      "y": "rM2zumW497ix-_mcZq4Js1EQn__MaJ50KPZ2hhShSP0"
+    }
+  }'
+```
+
+The response returns the signed E-Key (`token`), expiry metadata, and the derived `cnf.jkt` binding.
 
 ## Status
 
 - [x] Repository initialized
-- [ ] E-Key issuer/server prototype
+- [x] E-Key issuer/server prototype
 - [ ] Client SDKs / DPoP helpers
-

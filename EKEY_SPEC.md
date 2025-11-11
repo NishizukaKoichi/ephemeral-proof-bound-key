@@ -95,11 +95,11 @@ Recommended libraries: Node.js `@panva/dpop`, Go `go-dpop`, Rust `oxide-auth` DP
 ## 4. mTLS Flow
 
 1. Client performs mTLS handshake presenting a client cert (could be SPIFFE/SVID, WebAuthn attested cert, etc.).
-2. EKS issues E-Key embedding the cert fingerprint into `cnf.jkt`.
+2. EKS derives the certificate fingerprint (e.g., SHA-256, lowercase, no colons) and embeds it into `cnf.jkt`. Issuance requests do **not** send this fingerprint; the server must read it from the TLS session to prevent tampering.
 3. Resource server enforces:
    - Connection uses TLS1.3 + mutual auth.
     - `aud` matches service origin.
-    - Presented cert fingerprint matches `cnf.jkt`.
+    - Presented cert fingerprint matches `cnf.jkt` (normalize colons/case before comparison).
 
 mTLS mode omits the `DPoP` header; the TLS channel proves possession.
 

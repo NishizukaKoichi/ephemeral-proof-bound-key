@@ -1,12 +1,28 @@
-import Fastify from 'fastify';
+import Fastify, { FastifyServerOptions } from 'fastify';
 import { config } from './config.js';
 import { issueToken, TokenRequestSchema } from './issuer.js';
+import { ensureClientCertificate, NodeTlsCertificateExtractor } from './mtls.js';
 
-export function buildServer() {
-  const app = Fastify({ logger: true });
+const certExtractor = new NodeTlsCertificateExtractor();
+
+export function buildServer(options: FastifyServerOptions = {}) {
+  const app = Fastify({ ...options, logger: options.logger ?? true });
 
   app.post('/token', async (request, reply) => {
-    const parsed = TokenRequestSchema.safeParse(request.body);
+    let body = request.body as Record<string, unknown> | undefined;
+    const bindMode = (body?.['bind'] as string | undefined) ?? 'DPoP';
+    if (bindMode === 'mTLS') {
+      try {
+        const cert = ensureClientCertificate(certExtractor, request.raw as any);
+        body = { ...body, cert_fingerprint: cert.fingerprint };
+      } catch (error) {
+        request.log.warn({ err: error }, 'client certificate extraction failed');
+        reply.status(401).send({ error: (error as Error).message });
+        return;
+      }
+    }
+
+    const parsed = TokenRequestSchema.safeParse(body);
 
     if (!parsed.success) {
       reply.status(400).send({

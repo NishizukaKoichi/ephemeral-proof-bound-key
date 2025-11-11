@@ -163,4 +163,43 @@ describe('EKeyVerifier', () => {
       verifier.verify({ token: issued.token, dpop: badProof, method: 'POST', url: apiUrl }),
     ).rejects.toMatchObject({ code: 'invalid_proof' satisfies EKeyVerificationError['code'] });
   });
+
+  test('accepts mTLS token when fingerprint matches', async () => {
+    const fingerprint = '11AA22BB';
+    const issued = await issueToken({
+      sub: 'agent-mtls',
+      aud: 'https://api.example.com',
+      cap: { action: 'POST:/payments', limit: 1 },
+      bind: 'mTLS',
+      cert_fingerprint: fingerprint,
+    });
+
+    const result = await verifier.verify({
+      token: issued.token,
+      method: 'POST',
+      url: apiUrl,
+      clientCertFingerprint: '11:aa:22:bb',
+    });
+
+    expect(result.sub).toBe('agent-mtls');
+  });
+
+  test('rejects mTLS token when fingerprint mismatches', async () => {
+    const issued = await issueToken({
+      sub: 'agent-mtls-fail',
+      aud: 'https://api.example.com',
+      cap: { action: 'POST:/payments', limit: 1 },
+      bind: 'mTLS',
+      cert_fingerprint: 'abcd',
+    });
+
+    await expect(async () =>
+      verifier.verify({
+        token: issued.token,
+        method: 'POST',
+        url: apiUrl,
+        clientCertFingerprint: 'zzzz',
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_proof' satisfies EKeyVerificationError['code'] });
+  });
 });

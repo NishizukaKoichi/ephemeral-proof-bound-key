@@ -19,14 +19,24 @@ const JwkSchema = z
   })
   .passthrough();
 
-export const TokenRequestSchema = z.object({
-  sub: z.string().min(1),
-  aud: z.string().url(),
-  jwk: JwkSchema,
-  cap: CapabilitySchema,
-  ttl: z.coerce.number().int().min(1).max(60).optional(),
-  bind: z.enum(['DPoP', 'mTLS']).default('DPoP'),
-});
+export const TokenRequestSchema = z
+  .object({
+    sub: z.string().min(1),
+    aud: z.string().url(),
+    jwk: JwkSchema.optional(),
+    cap: CapabilitySchema,
+    ttl: z.coerce.number().int().min(1).max(60).optional(),
+    bind: z.enum(['DPoP', 'mTLS']).default('DPoP'),
+    cert_fingerprint: z.string().optional(),
+  })
+  .refine((data) => (data.bind === 'DPoP' ? Boolean(data.jwk) : true), {
+    message: 'jwk required when bind=DPoP',
+    path: ['jwk'],
+  })
+  .refine((data) => (data.bind === 'mTLS' ? Boolean(data.cert_fingerprint) : true), {
+    message: 'cert_fingerprint required when bind=mTLS',
+    path: ['cert_fingerprint'],
+  });
 
 export type TokenRequest = z.infer<typeof TokenRequestSchema>;
 
@@ -42,12 +52,26 @@ const randomTrace = (): string =>
   Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString('hex');
 
 export async function issueToken(request: TokenRequest): Promise<TokenResponse> {
+  const bindMode = request.bind ?? 'DPoP';
   const now = Math.floor(Date.now() / 1000);
   const ttl = request.ttl ?? 60;
   const exp = now + ttl;
   const trace = randomTrace();
 
-  const jkt = await calculateJwkThumbprint(request.jwk as JWK, 'sha256');
+  let jkt: string;
+  if (bindMode === 'DPoP') {
+    if (!request.jwk) {
+      throw new Error('jwk required for DPoP-bound tokens');
+    }
+    jkt = await calculateJwkThumbprint(request.jwk as JWK, 'sha256');
+  } else if (bindMode === 'mTLS') {
+    if (!request.cert_fingerprint) {
+      throw new Error('cert_fingerprint required for mTLS-bound tokens');
+    }
+    jkt = request.cert_fingerprint.replace(/:/g, '').toLowerCase();
+  } else {
+    throw new Error(`unsupported bind mode ${request.bind}`);
+  }
   const privateKey = await signingKeyProvider.getPrivateKey();
 
   const payload = {
@@ -67,7 +91,7 @@ export async function issueToken(request: TokenRequest): Promise<TokenResponse> 
   };
 
   const token = await new SignJWT(payload)
-    .setProtectedHeader({ alg: config.SIGNING_ALG, typ: 'EKEY', bind: request.bind })
+    .setProtectedHeader({ alg: config.SIGNING_ALG, typ: 'EKEY', bind: bindMode })
     .sign(privateKey);
 
   return {

@@ -82,6 +82,36 @@ app.addHook('preHandler', async (request, reply) => {
 
 `result` contains the caller `sub`, `cap`, and `trace`, so handlers can enforce business logic or log provenance. Structured errors differentiate between expired tokens, capability mismatches, invalid proofs, and replay attempts.
 
+## mTLS binding (Issue #4)
+
+When clients use SPIFFE/SVID or WebAuthn-issued certificates, run the issuer over TLS with `requestCert: true`. The Fastify server automatically fingerprints the client certificate and embeds it as `cnf.jkt` when `bind: "mTLS"`:
+
+```ts
+const app = buildServer({
+  https: {
+    key: fs.readFileSync('./certs/server-key.pem'),
+    cert: fs.readFileSync('./certs/server-cert.pem'),
+    ca: fs.readFileSync('./certs/ca.pem'),
+    requestCert: true,
+    rejectUnauthorized: true,
+  },
+});
+```
+
+On the resource server, pass the TLS fingerprint into the verifier:
+
+```ts
+const fingerprint = request.raw.socket.getPeerCertificate()?.fingerprint256;
+await verifier.verify({
+  token,
+  method: request.method,
+  url: `https://api.example.com${request.url}`,
+  clientCertFingerprint: fingerprint,
+});
+```
+
+Fingerprints are normalized (`lowercase`, no colons) before comparison. No DPoP header is required in this mode; the TLS channel proves possession.
+
 ## Client helper & DPoP proofs (Issue #3)
 
 Use `EKeyClient` + `DPoPHelper` to manage the client keypair, compute the `cnf.jkt`, and mint DPoP proofs per request:

@@ -21,9 +21,10 @@ export interface VerifierOptions {
 
 export interface VerifyInput {
   token: string;
-  dpop: string;
   method: string;
   url: string;
+  dpop?: string;
+  clientCertFingerprint?: string;
 }
 
 export interface VerificationResult {
@@ -65,12 +66,12 @@ export class EKeyVerifier {
   }
 
   async verify(input: VerifyInput): Promise<VerificationResult> {
-    if (!input.token || !input.dpop) {
-      throw new EKeyVerificationError('invalid_request', 'token and dpop proof are required');
+    if (!input.token) {
+      throw new EKeyVerificationError('invalid_request', 'token is required');
     }
 
     const publicKey = await this.publicKeyPromise;
-    const { payload } = await jwtVerify(input.token, publicKey, {
+    const { payload, protectedHeader } = await jwtVerify(input.token, publicKey, {
       issuer: this.options.issuer,
       audience: this.options.audience,
       clockTolerance: this.clockTolerance,
@@ -120,13 +121,34 @@ export class EKeyVerifier {
       throw err;
     }
 
-    await this.verifyDpopProof({
-      proof: input.dpop,
-      expectedMethod: requestMethod,
-      expectedUrl: requestUrl,
-      expectedTrace: trace,
-      expectedJkt: (payload.cnf as { jkt?: string } | undefined)?.jkt,
-    });
+    const cnfJkt = (payload.cnf as { jkt?: string } | undefined)?.jkt;
+    if (!cnfJkt) {
+      throw new EKeyVerificationError('invalid_token', 'cnf.jkt missing from token');
+    }
+
+    const bind = (protectedHeader as { bind?: 'DPoP' | 'mTLS' } | undefined)?.bind ?? 'DPoP';
+    if (bind === 'DPoP') {
+      if (!input.dpop) {
+        throw new EKeyVerificationError('invalid_request', 'DPoP proof required for bind=DPoP');
+      }
+      await this.verifyDpopProof({
+        proof: input.dpop,
+        expectedMethod: requestMethod,
+        expectedUrl: requestUrl,
+        expectedTrace: trace,
+        expectedJkt: cnfJkt,
+      });
+    } else if (bind === 'mTLS') {
+      const fingerprint = input.clientCertFingerprint?.replace(/:/g, '').toLowerCase();
+      if (!fingerprint) {
+        throw new EKeyVerificationError('invalid_request', 'client certificate fingerprint required for mTLS token');
+      }
+      if (fingerprint !== cnfJkt) {
+        throw new EKeyVerificationError('invalid_proof', 'client certificate fingerprint mismatch');
+      }
+    } else {
+      throw new EKeyVerificationError('invalid_token', `unsupported bind mode ${bind}`);
+    }
 
     return {
       sub: String(payload.sub),

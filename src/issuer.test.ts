@@ -39,6 +39,24 @@ describe('issueToken', () => {
     expect(protectedHeader.bind).toBe('DPoP');
   });
 
+  test('issues an mTLS-bound token using cert fingerprint', async () => {
+    const response = await issueToken({
+      sub: 'agent-mtls',
+      aud: 'https://api.example.com',
+      cap: { action: 'POST:/payments', limit: 1 },
+      ttl: 30,
+      bind: 'mTLS',
+      cert_fingerprint: 'AA:BB:CC',
+    });
+
+    expect(response.cnf.jkt).toBe('aabbcc');
+
+    const publicJwk = await signingKeyProvider.getPublicJwk();
+    const publicKey = await importJWK(publicJwk, 'ES256');
+    const { protectedHeader } = await jwtVerify(response.token, publicKey);
+    expect(protectedHeader.bind).toBe('mTLS');
+  });
+
   test('rejects invalid ttl via schema', () => {
     const result = TokenRequestSchema.safeParse({
       sub: 'agent',
@@ -51,6 +69,20 @@ describe('issueToken', () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0].message).toContain('<=60');
+    }
+  });
+
+  test('requires jwk when bind=DPoP', () => {
+    const result = TokenRequestSchema.safeParse({
+      sub: 'agent',
+      aud: 'https://api.example.com',
+      cap: { action: 'POST:/payments', limit: 1 },
+      bind: 'DPoP',
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].path).toContain('jwk');
     }
   });
 });

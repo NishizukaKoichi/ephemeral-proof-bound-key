@@ -82,9 +82,43 @@ app.addHook('preHandler', async (request, reply) => {
 
 `result` contains the caller `sub`, `cap`, and `trace`, so handlers can enforce business logic or log provenance. Structured errors differentiate between expired tokens, capability mismatches, invalid proofs, and replay attempts.
 
+## Client helper & DPoP proofs (Issue #3)
+
+Use `EKeyClient` + `DPoPHelper` to manage the client keypair, compute the `cnf.jkt`, and mint DPoP proofs per request:
+
+```ts
+import { EKeyClient } from './src/client/issuer-client.js';
+
+const client = new EKeyClient({ issuerUrl: 'http://localhost:4000' });
+
+const token = await client.requestToken({
+  sub: 'agent-123',
+  aud: 'https://api.example.com/payments',
+  cap: { action: 'POST:/payments', limit: 1 },
+  ttl: 30,
+});
+
+const { proof } = await client.dpopHelper.createProof({
+  method: 'POST',
+  url: 'https://api.example.com/payments',
+  nonce: token.trace,
+});
+
+await fetch('https://api.example.com/payments', {
+  method: 'POST',
+  headers: {
+    Authorization: `EKey ${token.token}`,
+    DPoP: proof,
+  },
+  body: JSON.stringify({ amount: 1000 }),
+});
+```
+
+The helper caches the keypair per session; `client.dpopHelper.computeJkt()` can be supplied to the issuer if needed, ensuring the resulting token’s `cnf.jkt` matches.
+
 ## Status
 
 - [x] Repository initialized
 - [x] E-Key issuer/server prototype
 - [x] Resource-server verification middleware
-- [ ] Client SDKs / DPoP helpers
+- [x] Client SDKs / DPoP helpers

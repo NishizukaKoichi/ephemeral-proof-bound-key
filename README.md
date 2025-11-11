@@ -167,6 +167,12 @@ const verifier = new EKeyVerifier({
 - GitHub Actions (`.github/workflows/ci.yml`) installs dependencies, runs type-checks, unit tests, and the conformance suite on every push/PR to `main`.
 - Regenerate sample tokens or proofs under `tests/fixtures/` as needed for docs and demos.
 
+## Operations (Issue #7)
+
+- `docs/OPERATIONS.md` outlines deployment topologies, TLS/mTLS hardening, KMS integration, usage-store options, observability, and DR plans.
+- Before production deploys: ensure TLS1.3 + mutual auth, KMS-backed signing keys, and shared replay cache (Redis) are in place.
+- Hook the `auditLogger` output into your SIEM with ≥90 days retention; alert on spikes in `replay_blocked` and `invalid_proof`.
+
 ## Status
 
 - [x] Repository initialized
@@ -176,4 +182,4 @@ const verifier = new EKeyVerifier({
 - [x] Support mTLS binding and SPIFFE/SVID integration
 - [x] Implement replay protection and trace auditing
 - [x] Create conformance test suite and CI
-- [ ] Document deployment and operational guidance
+- [x] Document deployment and operational guidance

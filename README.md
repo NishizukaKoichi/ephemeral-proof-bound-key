@@ -161,6 +161,12 @@ const verifier = new EKeyVerifier({
 });
 ```
 
+## Conformance & CI (Issue #6)
+
+- `npm run test:conformance` spins up the issuer via Fastify’s inject API, requests an E-Key, and verifies the full DPoP-bound flow using the production verifier.
+- GitHub Actions (`.github/workflows/ci.yml`) installs dependencies, runs type-checks, unit tests, and the conformance suite on every push/PR to `main`.
+- Regenerate sample tokens or proofs under `tests/fixtures/` as needed for docs and demos.
+
 ## Status
 
 - [x] Repository initialized
@@ -169,5 +175,5 @@ const verifier = new EKeyVerifier({
 - [x] Client SDKs / DPoP helpers
 - [x] Support mTLS binding and SPIFFE/SVID integration
 - [x] Implement replay protection and trace auditing
-- [ ] Create conformance test suite and CI
+- [x] Create conformance test suite and CI
 - [ ] Document deployment and operational guidance

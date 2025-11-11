@@ -9,7 +9,7 @@ Status legend: ✅ Done · 🚧 In progress · ⏳ Todo
 | ✅ | Provide DPoP proof helper and client SDK | [#3](https://github.com/NishizukaKoichi/ephemeral-proof-bound-key/issues/3) |
 | ✅ | Support mTLS binding and SPIFFE/SVID integration | [#4](https://github.com/NishizukaKoichi/ephemeral-proof-bound-key/issues/4) |
 | ✅ | Implement replay protection and trace auditing | [#5](https://github.com/NishizukaKoichi/ephemeral-proof-bound-key/issues/5) |
-| ⏳ | Create conformance test suite and CI | [#6](https://github.com/NishizukaKoichi/ephemeral-proof-bound-key/issues/6) |
+| ✅ | Create conformance test suite and CI | [#6](https://github.com/NishizukaKoichi/ephemeral-proof-bound-key/issues/6) |
 | ⏳ | Document deployment and operational guidance | [#7](https://github.com/NishizukaKoichi/ephemeral-proof-bound-key/issues/7) |
 
 Update this file whenever an issue advances or new scopes are discovered.

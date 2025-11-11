@@ -43,8 +43,48 @@ curl -X POST http://localhost:4000/token \\
 
 The response returns the signed E-Key (`token`), expiry metadata, and the derived `cnf.jkt` binding.
 
+## Resource server verification (Issue #2)
+
+Use the verifier helper to guard protected routes. Example with Fastify:
+
+```ts
+import Fastify from 'fastify';
+import { EKeyVerifier } from './src/verifier.js';
+import { signingKeyProvider } from './src/signing.js';
+import { config } from './src/config.js';
+
+const verifier = new EKeyVerifier({
+  issuer: config.ISSUER_URL,
+  audience: 'https://api.example.com',
+  issuerPublicJwk: await signingKeyProvider.getPublicJwk(),
+});
+
+const app = Fastify();
+app.addHook('preHandler', async (request, reply) => {
+  try {
+    const auth = request.headers.authorization ?? '';
+    const token = auth.replace(/^EKey\\s+/i, '');
+    const dpop = request.headers.dpop as string;
+
+    const result = await verifier.verify({
+      token,
+      dpop,
+      method: request.method,
+      url: `https://api.example.com${request.url}`,
+    });
+
+    request.user = result;
+  } catch (err) {
+    reply.status(401).send({ error: err.code ?? 'unauthorized', message: err.message });
+  }
+});
+```
+
+`result` contains the caller `sub`, `cap`, and `trace`, so handlers can enforce business logic or log provenance. Structured errors differentiate between expired tokens, capability mismatches, invalid proofs, and replay attempts.
+
 ## Status
 
 - [x] Repository initialized
 - [x] E-Key issuer/server prototype
+- [x] Resource-server verification middleware
 - [ ] Client SDKs / DPoP helpers
